@@ -69,7 +69,8 @@ options:
 
 ### Authors
 
-* Gilles Darold
+- Gilles Darold
+
 
 ### License
 
