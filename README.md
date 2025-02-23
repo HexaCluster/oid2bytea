@@ -69,10 +69,9 @@ options:
 
 ### Authors
 
-- Gilles Darold
+Created and maintained by Gilles Darold
 
-
-### License
+### License
 
 This extension is free software distributed under the PostgreSQL Licence.
 
