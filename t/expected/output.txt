@@ -1,3 +1,4 @@
+Create the test database
 CREATE TABLE
 INSERT 0 1
 CREATE SCHEMA
@@ -6,6 +7,7 @@ INSERT 0 1
 CREATE SCHEMA
 CREATE TABLE
 INSERT 0 1
+Migrate only one table
 LOG: Connection to PostgreSQL successfull
 LOG: Starting conversion of large objects to bytea
 LOG: Looking for large objects columns
@@ -22,21 +24,25 @@ LOG: ALTER TABLE public.test_oid1 DROP COLUMN bindata
 LOG: ALTER TABLE public.test_oid1 RENAME COLUMN bytea_col0 TO bindata
 LOG: Running vacuumlo on the database to remove orphan large object
 LOG: convertion ended
+must have been migrated
                                       substr                                      
 ----------------------------------------------------------------------------------
- \x23204372656174652074686520746573742064617461626173650a64726f706462202d2d69662d
+ \x6563686f202243726561746520746865207465737420646174616261736522203e206f75747075
 (1 ligne)
 
+must NOT have been migrated
  length 
 --------
       6
 (1 ligne)
 
+must NOT have been migrated
  length 
 --------
       6
 (1 ligne)
 
+Migrate all tables from schema sch1
 LOG: Connection to PostgreSQL successfull
 LOG: Starting conversion of large objects to bytea
 LOG: Looking for large objects columns
@@ -51,7 +57,7 @@ LOG: Running vacuumlo on the database to remove orphan large object
 LOG: convertion ended
                                       substr                                      
 ----------------------------------------------------------------------------------
- \x23204372656174652074686520746573742064617461626173650a64726f706462202d2d69662d
+ \x6563686f202243726561746520746865207465737420646174616261736522203e206f75747075
 (1 ligne)
 
  length 
@@ -59,6 +65,7 @@ LOG: convertion ended
       6
 (1 ligne)
 
+Migrate all remaining table
 LOG: Connection to PostgreSQL successfull
 LOG: Starting conversion of large objects to bytea
 LOG: Looking for large objects columns
@@ -73,6 +80,21 @@ LOG: Running vacuumlo on the database to remove orphan large object
 LOG: convertion ended
                                       substr                                      
 ----------------------------------------------------------------------------------
- \x23204372656174652074686520746573742064617461626173650a64726f706462202d2d69662d
+ \x6563686f202243726561746520746865207465737420646174616261736522203e206f75747075
+(1 ligne)
+
+Test multi process
+CREATE TABLE
+INSERT 0 1000
+CREATE TABLE
+INSERT 0 2000
+ count |   sum   
+-------+---------
+  1000 | 3594000
+(1 ligne)
+
+ count |   sum   
+-------+---------
+  2000 | 7188000
 (1 ligne)
 

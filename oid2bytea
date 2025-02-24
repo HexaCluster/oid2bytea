@@ -3,7 +3,7 @@
 # Project  : This script is allow migration of large object column into bytea.
 # Language : Perl
 # Authors  : Gilles Darold, gilles _AT_ darold _DOT_ net
-# Copyright: Copyright (c) 2025 : Gilles Darold - All rights reserved -
+# Copyright: Copyright (c) 2025 : HexaCluster - All rights reserved -
 # Usage    : See oid2bytea --help
 # Licence  : PostgreSQL
 #------------------------------------------------------------------------------
@@ -16,6 +16,8 @@ use DBI;
 use DBD::Pg;
 use POSIX qw(strftime);
 
+$| = 1;
+
 my $VERSION = '1.0';
 
 # Command line options variables
@@ -27,6 +29,7 @@ my $VER    = 0;
 my $HELP   = 0;
 my $QUIET  = 0;
 my $JOBS   = 1;
+my $SPLIT  = 1;
 my $NOTIME = 0;
 my $DRY_RUN    = 0;
 my $NOVACUUMLO = 0;
@@ -41,6 +44,7 @@ my $PG_OPT       = '';
 my $dbh          = undef;
 
 my $parent_pid = $$;
+my $TMP_LOG_FILE = '/tmp/oid2bytea.tmp';
 
 ####
 # Method used to fork as many child as wanted,
@@ -115,7 +119,8 @@ GetOptions(
 	"d|database=s"       => \$DBNAME,
 	"D|dry-run!"         => \$DRY_RUN,
 	"h|host=s"           => \$DBHOST,
-	"j|jobs=s"           => \$JOBS,
+	"j|jobs=i"           => \$JOBS,
+	"J|job-split=i"      => \$SPLIT,
 	"n|namespace=s"      => \@INC_SCHEMAS,
 	"p|port=i"           => \$DBPORT,
 	"q|quiet!"           => \$QUIET,
@@ -159,6 +164,11 @@ if ($DBPORT) {
 if ($DBUSER) {
 	$PG_OPT .= " -U $DBUSER";
 }
+
+my $fh = new IO::File;
+$fh->open(">$TMP_LOG_FILE") or die "FATAL: can't write to temp file $TMP_LOG_FILE, $!\n";
+$fh->print();
+$fh->close();
 
 # Set DBD::Pg options and connect to the database for testing
 my $dbpg_opt = '';
@@ -266,6 +276,8 @@ if (scalar keys %collist > 0)
 # Disconnect from snapshot connection
 $dbh->disconnect;
 
+unlink($TMP_LOG_FILE);
+
 exit(1) if ($interrupt);
 
 logmsg('LOG', 'convertion ended');
@@ -311,22 +323,23 @@ Usage: oid2bytea -d dbname [options]
 
 options:
 
-  -d, --database DBNAME        database where the migration job must be done.
-  -D, --dry-run                do not do anything, just show what will be done.
-  -h, --host HOSTNAME          database server host or socket directory.
-  -j, --job NUM                use this many parallel jobs to process tables.
-  -n, --namespace NAME         process tables created under the given schema.
-                               Can be used multiple time.
-  -p, --port PORT              database server port number, default: 5432.
-  -q, --quiet                  don't display messages issued with the LOG level.
-  -t, --table TABLE            migrate oid column(s) of the named relation. Can
-                               be used multiple time.
-  -u, --user NAME              connect as specified database user.
-  -v, --version                show program version.
-  -V, --no-vacuumlo            do not run vacuumlo at end to remove orphan
-                               large objects.
-  --help                       show usage.
-  --no-time                    don't show timestamp in log output.
+  -d, --database DBNAME    database where the migration job must be done.
+  -D, --dry-run            do not do anything, just show what will be done.
+  -h, --host HOSTNAME      database server host or socket directory.
+  -j, --job NUM            use this many parallel jobs to process all tables.
+  -J, --job-split NUM      use this many parallel jobs to process single table.
+  -n, --namespace NAME     process tables created under the given schema.
+                           Can be used multiple time.
+  -p, --port PORT          database server port number, default: 5432.
+  -q, --quiet              don't display messages issued with the LOG level.
+  -t, --table TABLE        migrate oid column(s) of the named relation. Can
+                           be used multiple time.
+  -u, --user NAME          connect as specified database user.
+  -v, --version            show program version.
+  -V, --no-vacuumlo        do not run vacuumlo at end to remove orphan large
+                           objects.
+  --help                   show usage.
+  --no-time                don't show timestamp in log output.
 
 $msg
 };
@@ -351,11 +364,18 @@ sub logmsg
 
 	return if ($QUIET);
 
+	$fh = new IO::File;
+	$fh->open(">>$TMP_LOG_FILE") or die "FATAL: can't write to temp file $TMP_LOG_FILE, $!\n";
+	flock($fh, 2) || die "FATAL: can't lock file $TMP_LOG_FILE\n";
+
 	if ($NOTIME) {
-		print "$level: $message\n"
+		print "$level: $message\n";
 	} else {
-		print '[' , get_current_date(), '] ', "$level: $message\n"
+		print '[' , get_current_date(), '] ', "$level: $message\n";
 	}
+
+	$fh->print("$level: $message\n");
+	$fh->close;
 }
 
 
@@ -388,9 +408,32 @@ sub transform_oid_to_bytea
 	}
 
 	# Migrate the large object into the bytea column(s)
-	logmsg('LOG', $update_sql);
-	if (!$DRY_RUN) {
-		$dbh->do($update_sql) or logmsg('FATAL', $dbh->errstr);
+	if ($SPLIT > 1)
+	{
+		my $procnum = 0;
+		for my $splitnum (1 .. $SPLIT)
+		{
+			logmsg('LOG', "Processing table $tb on chunk $splitnum on column $colums[0]...");
+			spawn sub {
+				update_column($update_sql, $colums[0], $splitnum);
+			};
+			$procnum++;
+		}
+		while ($procnum > 0)
+		{
+			my $kid = waitpid(-1, WNOHANG);
+			if ($kid > 0)
+			{
+				$procnum--;
+				delete $RUNNING_PIDS{$kid};
+				last;
+			}
+			usleep(50000);
+		}
+	}
+	else
+	{
+		update_column($update_sql, '', 0);
 	}
 
 	# Drop the oid column(s) and rename the bytea column(s) with the old name of the old oid column(s)
@@ -400,5 +443,16 @@ sub transform_oid_to_bytea
 		if (!$DRY_RUN) {
 			$dbh->do($q) or logmsg('ERROR', $dbh->errstr);
 		}
+	}
+}
+
+sub update_column
+{
+	my ($update_sql, $split_col, $procnum) = @_;
+
+	$update_sql .= " WHERE MOD(${split_col}::bigint, $SPLIT) = $procnum - 1" if ($procnum > 0 and $split_col);
+	logmsg('LOG', $update_sql);
+	if (!$DRY_RUN) {
+		$dbh->do($update_sql) or logmsg('FATAL', $dbh->errstr);
 	}
 }

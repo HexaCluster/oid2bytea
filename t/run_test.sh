@@ -1,6 +1,6 @@
-# Create the test database
+echo "Create the test database" > output.txt
 dropdb --if-exists oid2bytea_test > /dev/null 2>&1
-createdb oid2bytea_test > output.txt
+createdb oid2bytea_test >> output.txt
 if [ $? -ne 0 ]; then
 	exit 1
 fi
@@ -36,29 +36,31 @@ if [ $? -ne 0 ]; then
 	exit 3
 fi
 
-# Migrate only one table
+echo "Migrate only one table" >> output.txt
 perl oid2bytea -d oid2bytea_test -t test_oid1 --no-time >> output.txt
 if [ $? -ne 0 ]; then
 	exit 4
 fi
 
-# must have been migrated
+echo "must have been migrated" >> output.txt
 psql -d oid2bytea_test -c "SELECT substr(bindata::text, 1, 80) FROM test_oid1;" >> output.txt
 if [ $? -ne 0 ]; then
 	exit 5
 fi
-# must NOT have been migrated
+
+echo "must NOT have been migrated" >> output.txt
 psql -d oid2bytea_test -c "SELECT length(bindata::text) FROM sch1.test_oid2;" >> output.txt
 if [ $? -ne 0 ]; then
 	exit 6
 fi
-# must NOT have been migrated
+
+echo "must NOT have been migrated" >> output.txt
 psql -d oid2bytea_test -c "SELECT length(bindata::text) FROM sch2.test_oid3;" >> output.txt
 if [ $? -ne 0 ]; then
 	exit 7
 fi
 
-# Migrate all tables from schema sch1
+echo "Migrate all tables from schema sch1" >> output.txt
 perl oid2bytea -d oid2bytea_test -n sch1 --no-time >> output.txt
 if [ $? -ne 0 ]; then
 	exit 4
@@ -74,7 +76,7 @@ if [ $? -ne 0 ]; then
 	exit 6
 fi
 
-# Migrate all remaining table
+echo "Migrate all remaining table" >> output.txt
 perl oid2bytea -d oid2bytea_test --no-time >> output.txt
 if [ $? -ne 0 ]; then
 	exit 4
@@ -84,5 +86,40 @@ psql -d oid2bytea_test -c "SELECT substr(bindata::text, 1, 80) FROM sch2.test_oi
 if [ $? -ne 0 ]; then
 	exit 6
 fi
+
+echo "Test multi process" >> output.txt
+psql -d oid2bytea_test -c "CREATE TABLE test_oid4 (id integer, bindata oid);" >> output.txt
+if [ $? -ne 0 ]; then
+	exit 2
+fi
+psql -d oid2bytea_test -c "INSERT INTO test_oid4 SELECT g.i, lo_import('/tmp/run_test.sh') FROM generate_series(1, 1000) g(i);" >> output.txt
+if [ $? -ne 0 ]; then
+	exit 3
+fi
+
+psql -d oid2bytea_test -c "CREATE TABLE test_oid5 (id integer, bindata oid);" >> output.txt
+if [ $? -ne 0 ]; then
+	exit 2
+fi
+psql -d oid2bytea_test -c "INSERT INTO test_oid5 SELECT g.i, lo_import('/tmp/run_test.sh') FROM generate_series(1, 2000) g(i);" >> output.txt
+if [ $? -ne 0 ]; then
+	exit 3
+fi
+
+perl oid2bytea -j 2 -J 4 -d oid2bytea_test --no-time #>> output.txt
+if [ $? -ne 0 ]; then
+	exit 4
+fi
+
+psql -d oid2bytea_test -c "SELECT count(bindata), sum(length(bindata)) FROM test_oid4;" >> output.txt
+if [ $? -ne 0 ]; then
+	exit 7
+fi
+
+psql -d oid2bytea_test -c "SELECT count(bindata), sum(length(bindata)) FROM test_oid5;" >> output.txt
+if [ $? -ne 0 ]; then
+	exit 7
+fi
+
 
 

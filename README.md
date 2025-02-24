@@ -49,22 +49,23 @@ usage: oid2bytea -d dbname [options]
 
 options:
 
-  -d, --database DBNAME        database where the migration job must be done.
-  -D, --dry-run                do not do anything, just show what will be done.
-  -h, --host HOSTNAME          database server host or socket directory.
-  -j, --job NUM                use this many parallel jobs to process tables.
-  -n, --namespace NAME         process tables created under the given schema.
-                               Can be used multiple time.
-  -p, --port PORT              database server port number, default: 5432.
-  -q, --quiet                  don't display messages issued with the LOG level.
-  -t, --table TABLE            migrate oid column(s) of the named relation. Can
-                               be used multiple time.
-  -u, --user NAME              connect as specified database user.
-  -v, --version                show program version.
-  -V, --no-vacuumlo            do not run vacuumlo at end to remove orphan
-                               large objects.
-  --help                       show usage.
-  --no-time                    don't show timestamp in log output.
+  -d, --database DBNAME    database where the migration job must be done.
+  -D, --dry-run            do not do anything, just show what will be done.
+  -h, --host HOSTNAME      database server host or socket directory.
+  -j, --job NUM            use this many parallel jobs to process all tables.
+  -J, --job-split NUM      use this many parallel jobs to process single table.
+  -n, --namespace NAME     process tables created under the given schema.
+                           Can be used multiple time.
+  -p, --port PORT          database server port number, default: 5432.
+  -q, --quiet              don't display messages issued with the LOG level.
+  -t, --table TABLE        migrate oid column(s) of the named relation. Can
+                           be used multiple time.
+  -u, --user NAME          connect as specified database user.
+  -v, --version            show program version.
+  -V, --no-vacuumlo        do not run vacuumlo at end to remove orphan large
+                           objects.
+  --help                   show usage.
+  --no-time                don't show timestamp in log output.
 ```
 
 ### Authors
