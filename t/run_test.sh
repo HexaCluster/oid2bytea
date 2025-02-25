@@ -106,17 +106,19 @@ if [ $? -ne 0 ]; then
 	exit 3
 fi
 
-perl oid2bytea -j 2 -J 4 -d oid2bytea_test --no-time #>> output.txt
+echo "Migrating 2 table at a time splitted by 4" >> output.txt
+
+perl oid2bytea -j 2 -J 4 -d oid2bytea_test --no-time
 if [ $? -ne 0 ]; then
 	exit 4
 fi
 
-psql -d oid2bytea_test -c "SELECT count(bindata), sum(length(bindata)) FROM test_oid4;" >> output.txt
+psql -d oid2bytea_test -c "SELECT count(bindata), sum(length(bindata::text)) FROM test_oid4;" >> output.txt
 if [ $? -ne 0 ]; then
 	exit 7
 fi
 
-psql -d oid2bytea_test -c "SELECT count(bindata), sum(length(bindata)) FROM test_oid5;" >> output.txt
+psql -d oid2bytea_test -c "SELECT count(bindata), sum(length(bindata::text)) FROM test_oid5;" >> output.txt
 if [ $? -ne 0 ]; then
 	exit 7
 fi
