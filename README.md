@@ -68,6 +68,8 @@ options:
 
   -d, --database DBNAME      database where the migration job must be done.
   -D, --dest-database DBNAME database where the migration data must be sent.
+  -f, --function FCTNAME     use this function to process the bytea returned
+                             by the call to lo_get(). It must return a bytea.
   -h, --host HOSTNAME        database server host or socket directory.
   -H, --dest-host HOSTNAME   remote database server host or socket directory.
   -j, --job NUM              use this many parallel jobs to process all tables.
