@@ -15,6 +15,7 @@ LOG: Skiping, not in table list.
 LOG: Found oid column in table sch1.test_oid2 column bindata.
 LOG: Skiping, not in table list.
 LOG: Processing table public.test_oid1 remotely...
+LOG: COPY (SELECT id, lo_get(bindata) FROM public.test_oid1) TO PROGRAM 'psql -X  -d oid2bytea_test_dest -p 5432 -c "\\copy public.test_oid1 FROM stdin"'
 LOG: Running vacuumlo on the database to remove orphan large object
 LOG: convertion ended
 must have been migrated
@@ -40,6 +41,7 @@ LOG: Looking for large objects columns
 LOG: Found oid column in table sch1.test_oid2 column bindata.
 LOG: Registering column "bindata" from table "sch1.test_oid2" for migration.
 LOG: Processing table sch1.test_oid2 remotely...
+LOG: COPY (SELECT id, lo_get(bindata) FROM sch1.test_oid2) TO PROGRAM 'psql -X  -d oid2bytea_test_dest -p 5432 -c "\\copy sch1.test_oid2 FROM stdin"'
 LOG: Running vacuumlo on the database to remove orphan large object
 LOG: convertion ended
                                       substr                                      
@@ -62,8 +64,11 @@ LOG: Registering column "bindata" from table "sch2.test_oid3" for migration.
 LOG: Found oid column in table sch1.test_oid2 column bindata.
 LOG: Registering column "bindata" from table "sch1.test_oid2" for migration.
 LOG: Processing table public.test_oid1 remotely...
+LOG: COPY (SELECT id, lo_get(bindata) FROM public.test_oid1) TO PROGRAM 'psql -X  -d oid2bytea_test_dest -p 5432 -c "\\copy public.test_oid1 FROM stdin"'
 LOG: Processing table sch1.test_oid2 remotely...
+LOG: COPY (SELECT id, lo_get(bindata) FROM sch1.test_oid2) TO PROGRAM 'psql -X  -d oid2bytea_test_dest -p 5432 -c "\\copy sch1.test_oid2 FROM stdin"'
 LOG: Processing table sch2.test_oid3 remotely...
+LOG: COPY (SELECT id, lo_get(bindata) FROM sch2.test_oid3) TO PROGRAM 'psql -X  -d oid2bytea_test_dest -p 5432 -c "\\copy sch2.test_oid3 FROM stdin"'
 LOG: Running vacuumlo on the database to remove orphan large object
 LOG: convertion ended
                                       substr                                      
