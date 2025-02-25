@@ -25,6 +25,7 @@ my $DBNAME = '';
 my $DBUSER = '';
 my $DBHOST = '';
 my $DBPORT = 5432;
+my $DBPWD = $ENV{PGPASSWORD} || '';
 my $VER    = 0;
 my $HELP   = 0;
 my $QUIET  = 0;
@@ -37,10 +38,17 @@ my $NOVACUUMLO = 0;
 my @INC_TABLES  = ();
 my @INC_SCHEMAS = ();
 
+my $REMOTE_DBNAME = '';
+my $REMOTE_DBUSER = '';
+my $REMOTE_DBHOST = '';
+my $REMOTE_DBPORT = 5432;
+my $REMOTE_DBPWD = $ENV{REMOTE_PGPASSWORD} || $ENV{PGPASSWORD} || '';
+
 my $interrupt    = 0;
 my $child_count  = 0;
 my %RUNNING_PIDS = ();
 my $PG_OPT       = '';
+my $REMOTE_PG_OPT = '';
 my $dbh          = undef;
 
 my $parent_pid = $$;
@@ -117,18 +125,22 @@ $| = 1;
 
 GetOptions(
 	"d|database=s"       => \$DBNAME,
-	"D|dry-run!"         => \$DRY_RUN,
+	"D|remote-database=s"=> \$REMOTE_DBNAME,
 	"h|host=s"           => \$DBHOST,
+	"H|remote-host=s"    => \$REMOTE_DBHOST,
 	"j|jobs=i"           => \$JOBS,
 	"J|job-split=i"      => \$SPLIT,
 	"n|namespace=s"      => \@INC_SCHEMAS,
 	"p|port=i"           => \$DBPORT,
+	"P|remote-port=i"    => \$REMOTE_DBPORT,
 	"q|quiet!"           => \$QUIET,
 	"t|table=s"          => \@INC_TABLES,
 	"u|user=s"           => \$DBUSER,
+	"U|remote-user=s"    => \$REMOTE_DBUSER,
 	"v|version!"         => \$VER,
 	"V|no-vacuumlo!"     => \$NOVACUUMLO,
 	"no-time!"           => \$NOTIME,
+	"dry-run!"           => \$DRY_RUN,
 	"help!"              => \$HELP,
 );
 
@@ -162,7 +174,7 @@ if ($DBPORT) {
 	$PG_OPT .= " -p $DBPORT";
 }
 if ($DBUSER) {
-	$PG_OPT .= " -U $DBUSER";
+	$PG_OPT .= " -u $DBUSER";
 }
 
 my $fh = new IO::File;
@@ -170,14 +182,32 @@ $fh->open(">$TMP_LOG_FILE") or die "FATAL: can't write to temp file $TMP_LOG_FIL
 $fh->print();
 $fh->close();
 
+# Set remote PostgreSQL related options
+if ($REMOTE_DBNAME) {
+	$REMOTE_PG_OPT .= " -d $REMOTE_DBNAME";
+}
+if ($REMOTE_DBHOST) {
+	$REMOTE_PG_OPT .= " -h $REMOTE_DBHOST";
+}
+if ($REMOTE_DBPORT) {
+	$REMOTE_PG_OPT .= " -p $REMOTE_DBPORT";
+}
+if ($REMOTE_DBUSER) {
+	$REMOTE_PG_OPT .= " -U $REMOTE_DBUSER";
+}
+
 # Set DBD::Pg options and connect to the database for testing
 my $dbpg_opt = '';
 $dbpg_opt .= ";port=$DBPORT" if ($DBPORT);
 $dbpg_opt .= ";host=$DBHOST" if ($DBHOST);
-$dbh = DBI->connect("dbi:Pg:application_name=oid2bytea;dbname=$DBNAME$dbpg_opt", $DBUSER, '', {AutoCommit => 1, InactiveDestroy => 1});
+$dbh = DBI->connect("dbi:Pg:application_name=oid2bytea;dbname=$DBNAME$dbpg_opt", $DBUSER, $DBPWD, {AutoCommit => 1, InactiveDestroy => 1});
 if (not defined $dbh) {
 	logmsg('FATAL', "cannot connect to database $DBNAME");
 }
+
+my $remote_dbpg_opt = '';
+$remote_dbpg_opt .= ";port=$REMOTE_DBPORT" if ($REMOTE_DBPORT);
+$remote_dbpg_opt .= ";host=$REMOTE_DBHOST" if ($REMOTE_DBHOST);
 
 # Look at PostgreSQL version
 my $sth = $dbh->prepare("SELECT version()") or die "FATAL: " . $dbh->errstr . "\n";
@@ -205,18 +235,35 @@ else
 {
 	$collist_query .= "  AND n.nspname IN ('" . join("','", @INC_SCHEMAS) . "')";
 }
+$collist_query .= " ORDER BY a.attnum";
+
 #logmsg('LOG', "Using query: $collist_query");
 
 $sth = $dbh->prepare($collist_query) or die "FATAL: " . $dbh->errstr . "\n";
 $sth->execute or die "FATAL: " . $dbh->errstr . "\n";
+
+# Query to get the full coilumn list of a table
+my $allcol_query = "SELECT a.attname FROM pg_attribute a JOIN pg_class c ON (a.attrelid=c.oid) JOIN pg_namespace n ON (c.relnamespace=n.oid) WHERE n.nspname = ? AND c.relname = ? AND a.attnum > 0 ORDER BY a.attnum";
+my $sth2 = $dbh->prepare($allcol_query) or die "FATAL: " . $dbh->errstr . "\n";
+
 my %collist = ();
+my %oid_collist = ();
 while (my $row = $sth->fetch)
 {
 	logmsg('LOG', "Found oid column in table $row->[0].$row->[1] column $row->[2].");
 	if ($#INC_TABLES < 0 || grep(/^$row->[1]$/, @INC_TABLES) || grep(/^$row->[0].$row->[1]$/, @INC_TABLES))
 	{
 		logmsg('LOG', "Registering column \"$row->[2]\" from table \"$row->[0].$row->[1]\" for migration.");
-		push(@{ $collist{"$row->[0].$row->[1]"} }, $row->[2]);
+		push(@{ $oid_collist{"$row->[0].$row->[1]"} }, $row->[2]);
+		# Grab the full list of column for remote work
+		if ($allcol_query)
+		{
+			$sth2->execute($row->[0], $row->[1]) or die "FATAL: " . $dbh->errstr . "\n";
+			while (my $r = $sth2->fetch)
+			{
+				push(@{ $collist{"$row->[0].$row->[1]"} }, $r->[0]);
+			}
+		}
 	}
 	else
 	{
@@ -224,17 +271,28 @@ while (my $row = $sth->fetch)
 	}
 }
 $sth->finish;
+$sth2->finish;
 
-if (scalar keys %collist == 0) {
+# Disconnect from snapshot connection
+$dbh->disconnect;
+
+if (scalar keys %oid_collist == 0) {
 	logmsg('LOG', "No large object columns found.");
 }
 
 my $procnum = 0;
 foreach my $tbname (sort keys %collist)
 {
+	last if ($interrupt);
+
 	spawn sub {
-		logmsg('LOG', "Processing table $tbname...");
-		transform_oid_to_bytea($procnum, $tbname, @{ $collist{$tbname} });
+		if (!$REMOTE_DBNAME) {
+			logmsg('LOG', "Processing table $tbname locally...");
+			transform_oid_to_bytea($procnum, $tbname, @{ $oid_collist{$tbname} });
+		} else {
+			logmsg('LOG', "Processing table $tbname remotely...");
+			remote_transform_oid_to_bytea($procnum, $tbname, \@{ $collist{$tbname} }, \@{ $oid_collist{$tbname} });
+		}
 	};
 	$procnum++;
 
@@ -263,24 +321,26 @@ while (scalar keys %RUNNING_PIDS > 0)
 }
 
 # Now vacuum all orphan large object from the database
-if (scalar keys %collist > 0)
+if (scalar keys %oid_collist > 0)
 {
 	logmsg('LOG', "Running vacuumlo on the database to remove orphan large object");
 	if ($DRY_RUN) {
-		logmsg('LOG', "vacuumlo --dry-run$PG_OPT $DBNAME");
+		logmsg('LOG', "vacuumlo --dry-run $PG_OPT $DBNAME");
 	} else {
 		`vacuumlo $PG_OPT $DBNAME`;
 	}
 }
 
-# Disconnect from snapshot connection
-$dbh->disconnect;
-
-unlink($TMP_LOG_FILE);
-
-exit(1) if ($interrupt);
+if ($interrupt)
+{
+	logmsg('LOG', '');
+	unlink($TMP_LOG_FILE);
+	_exit(1);
+}
 
 logmsg('LOG', 'convertion ended');
+
+unlink($TMP_LOG_FILE);
 
 exit 0;
 
@@ -295,7 +355,9 @@ sub usage
 
         print qq{
 Program used to convert large objects columns in a PostgreSQL database into
-bytea. The corresponding large objects data stored in the pg_largeobject table
+bytea. Two migration modes are supported: local and remote.
+
+**local**: the corresponding large objects data stored in the pg_largeobject table
 will be moved into a newly created bytea column and the old oid column will be
 removed. If no table list to convert is provided all columns with the oid data
 type will be converted to bytea otherwise all oid columns of the table list
@@ -307,10 +369,10 @@ will be converted to bytea.
 	ALTER TABLE tb1 rename column bytea_col TO lo_col;
 
 Once all large objects are migrated the tool runs the vacuumlo command to
-remove all orphan large objects from the datasase.
+remove all orphan large objects from the database.
 
 WARNING: the large object data will be duplicated until the `vacuumlo` command
-is runu, be sure to have enough free space.
+is run, be sure to have enough free space.
 
 You may want to run a VACUUM FULL on modified tables to recover space from
 the oid column(s).
@@ -318,28 +380,38 @@ the oid column(s).
 Also take care in your application that the bytea column(s) are appended at end
 of the table so their attribute position number change.
 
+**remote**: in this mode oid2bytea will migrate the local oid column to a remote
+database with the same structure except that the oid column have been replaced
+by a bytea column of the same name. To use the remote mode you just have to set
+the remote command line option (-D, -H, -P, -U). The all the data of the table
+with the oid column(s) will be moved and the oid replaced by the content of the
+large object before being sent to the remote database.
 
 Usage: oid2bytea -d dbname [options]
 
 options:
 
-  -d, --database DBNAME    database where the migration job must be done.
-  -D, --dry-run            do not do anything, just show what will be done.
-  -h, --host HOSTNAME      database server host or socket directory.
-  -j, --job NUM            use this many parallel jobs to process all tables.
-  -J, --job-split NUM      use this many parallel jobs to process single table.
-  -n, --namespace NAME     process tables created under the given schema.
-                           Can be used multiple time.
-  -p, --port PORT          database server port number, default: 5432.
-  -q, --quiet              don't display messages issued with the LOG level.
-  -t, --table TABLE        migrate oid column(s) of the named relation. Can
-                           be used multiple time.
-  -u, --user NAME          connect as specified database user.
-  -v, --version            show program version.
-  -V, --no-vacuumlo        do not run vacuumlo at end to remove orphan large
-                           objects.
-  --help                   show usage.
-  --no-time                don't show timestamp in log output.
+  -d, --database DBNAME      database where the migration job must be done.
+  -D, --dest-database DBNAME database where the migration data must be sent.
+  -h, --host HOSTNAME        database server host or socket directory.
+  -H, --dest-host HOSTNAME   remote database server host or socket directory.
+  -j, --job NUM              use this many parallel jobs to process all tables.
+  -J, --job-split NUM        use this many parallel jobs to process single table
+  -n, --namespace NAME       process tables created under the given schema.
+                             Can be used multiple time.
+  -p, --port PORT            database server port number, default: 5432.
+  -P, --dest-port PORT       database server port number, default: 5432.
+  -q, --quiet                don't display messages issued with the LOG level.
+  -t, --table TABLE          migrate oid column(s) of the named relation. Can
+                             be used multiple time.
+  -u, --user NAME            connect as specified database user.
+  -U, --dest-user NAME       remote connect as specified database user.
+  -v, --version              show program version.
+  -V, --no-vacuumlo          do not run vacuumlo at end to remove orphan large
+                             objects.
+  --help                     show usage.
+  --no-time                  don't show timestamp in log output.
+  --dry-run                  do not do anything, just show what will be done.
 
 $msg
 };
@@ -374,7 +446,6 @@ sub logmsg
 		print '[' , get_current_date(), '] ', "$level: $message\n";
 	}
 
-	$fh->print("$level: $message\n");
 	$fh->close;
 }
 
@@ -383,6 +454,12 @@ sub transform_oid_to_bytea
 {
 	my ($proc, $tb, @colums) = @_;
 
+	return if ($#colums < 0);
+
+	$dbh = DBI->connect("dbi:Pg:application_name=oid2bytea;dbname=$DBNAME$dbpg_opt", $DBUSER, $DBPWD, {AutoCommit => 1, InactiveDestroy => 1});
+	if (not defined $dbh) {
+		logmsg('FATAL', "cannot connect to database $DBNAME");
+	}
 
 	# Construct the SQL orders to execute
 	my @alter1 = ();
@@ -444,7 +521,61 @@ sub transform_oid_to_bytea
 			$dbh->do($q) or logmsg('ERROR', $dbh->errstr);
 		}
 	}
+
+	$dbh->disconnect();
 }
+
+sub remote_transform_oid_to_bytea
+{
+	my ($proc, $tb, $all_columns, $oid_colums) = @_;
+
+	return if ($#{$oid_colums} < 0);
+
+	my $query_get = '';
+	foreach my $c (@$all_columns)
+	{
+		if (!grep(/^$c$/, @$oid_colums)) {
+			$query_get .= "$c, ";
+		} else {
+			$query_get .= "lo_get($c), ";
+		}
+	}
+	$query_get =~ s/, $//;
+	$query_get .= ' FROM ' . $tb;
+
+	$query_get .= " WHERE MOD($oid_colums->[0]::bigint, $SPLIT) = $procnum - 1" if ($procnum > 0 and $oid_colums->[0]);
+	$query_get = qq{COPY (SELECT $query_get) TO PROGRAM 'psql -X $REMOTE_PG_OPT -c "\\\\copy $tb FROM stdin"'};
+
+	# Construct the SQL query to get data
+	if ($SPLIT > 1)
+	{
+		my $procnum = 0;
+		for my $splitnum (1 .. $SPLIT)
+		{
+			logmsg('LOG', "Processing table $tb on chunk $splitnum on column $oid_colums->[0]...");
+			spawn sub {
+				forward_data($query_get, $splitnum);
+			};
+			$procnum++;
+		}
+		while ($procnum > 0)
+		{
+			my $kid = waitpid(-1, WNOHANG);
+			if ($kid > 0)
+			{
+				$procnum--;
+				delete $RUNNING_PIDS{$kid};
+				last;
+			}
+			usleep(50000);
+		}
+	}
+	else
+	{
+		forward_data($query_get, 0);
+	}
+}
+
 
 sub update_column
 {
@@ -454,5 +585,21 @@ sub update_column
 	logmsg('LOG', $update_sql);
 	if (!$DRY_RUN) {
 		$dbh->do($update_sql) or logmsg('FATAL', $dbh->errstr);
+	}
+}
+
+sub forward_data
+{
+	my ($sql_get, $procnum) = @_;
+
+	logmsg('LOG', $sql_get);
+	if (!$DRY_RUN)
+	{
+		my $dbh = DBI->connect("dbi:Pg:application_name=oid2bytea;dbname=$DBNAME$dbpg_opt", $DBUSER, $DBPWD, {AutoCommit => 1, InactiveDestroy => 1});
+		if (not defined $dbh) {
+			logmsg('FATAL', "cannot connect to database $DBNAME");
+		}
+		$dbh->do($sql_get);
+		$dbh->disconnect();
 	}
 }
