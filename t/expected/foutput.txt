@@ -1,0 +1,23 @@
+Migrating oid column using a function send to remote table with text column.
+CREATE TABLE
+INSERT 0 1000
+CREATE TABLE
+ count |   sum    
+-------+----------
+  4000 | 14620000
+(1 row)
+
+   substr   
+------------
+ echo "Crea
+ echo "Crea
+ echo "Crea
+ echo "Crea
+ echo "Crea
+ echo "Crea
+ echo "Crea
+ echo "Crea
+ echo "Crea
+ echo "Crea
+(10 rows)
+

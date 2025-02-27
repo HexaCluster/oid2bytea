@@ -44,6 +44,19 @@ parallelize rows export of a single table by using the `-J` option. The value fo
 these option is the number of processes/CPUs you want to use to process the data.
 Take care that the resulting number of processes/CPUs used is `-j * -J`.
 
+**transform function**
+Using the -f option it is possible to use a function to process the data before
+inserting in the new column. For example, if all your large objects data have
+been compressed using gzip, you may want to uncompress the bytea data to benefit
+of the PostgreSQL native toast compression. In this case, use the
+[psql-gzip](https://github.com/pramsey/pgsql-gzip) extension and use `-f gunzip`
+at command line.
+
+Another example of use is to convert the large objects to a text column if all
+the data are text data. In this case use `-f "encode(%, 'escape')"` at command
+line and oid2bytea will replace the % placeholder by the call to `lo_get()` with
+the name of the column processed.
+
 ### Requirements
 
 oid2bytea is a Perl program that require the following Perl modules:
