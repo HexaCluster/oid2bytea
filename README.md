@@ -39,9 +39,9 @@ of the table so their attribute position number change.
 Be adviszd to make a backup of your tables with large objects oid columns before
 running this tool. They will be dropped unless you use the `--no-drop` option.
 
-#### Remote
+#### remote
 
-in this mode oid2bytea will migrate the local oid column to a remote database
+In this mode oid2bytea will migrate the local oid column to a remote database
 with the same structure except that the oid column have been replaced by a bytea
 column of the same name. To use the remote mode you just have to set the remote
 command line options (`-D`, `-H`, `-P`, `-U`). The all the data of the table with the oid
