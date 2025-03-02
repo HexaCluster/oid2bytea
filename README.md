@@ -13,13 +13,13 @@ removed. If no table list to convert is provided all columns with the oid data
 type will be converted to bytea otherwise all oid columns of the table list
 will be converted to bytea. 
 ```
-	ALTER TABLE tb1 ADD COLUMN bytea_col bytea;
-	UPDATE tb1 SET bytea_col = lo_get(lo_col);
-	UPDATE tb1 AS t1 SET bytea_col = lo_get(lo_col)
-		FROM pg_largeobject_metadata t2
-		WHERE t2.oid = t1.lo_col;
-	ALTER TABLE tb1 DROP COLUMN lo_col;
-	ALTER TABLE tb1 RENAME COLUMN bytea_col TO lo_col;
+ALTER TABLE tb1 ADD COLUMN bytea_col bytea;
+UPDATE tb1 SET bytea_col = lo_get(lo_col);
+UPDATE tb1 AS t1 SET bytea_col = lo_get(lo_col)
+    FROM pg_largeobject_metadata t2
+    WHERE t2.oid = t1.lo_col;
+ALTER TABLE tb1 DROP COLUMN lo_col;
+ALTER TABLE tb1 RENAME COLUMN bytea_col TO lo_col;
 ```
 Once all large objects are migrated the tool runs the vacuumlo command to
 remove all orphan large objects from the database.
@@ -39,7 +39,7 @@ of the table so their attribute position number change.
 Be adviszd to make a backup of your tables with large objects oid columns before
 running this tool. They will be dropped unless you use the `--no-drop` option.
 
-#### Remote
+#### Remote
 
 in this mode oid2bytea will migrate the local oid column to a remote database
 with the same structure except that the oid column have been replaced by a bytea
