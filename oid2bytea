@@ -227,8 +227,8 @@ logmsg('LOG', "Connection to PostgreSQL successfull");
 logmsg('LOG', 'Starting conversion of large objects to bytea');
 
 # Get oid columns to migrate
-logmsg('LOG', 'Looking for large objects columns');
-my $collist_query = "SELECT n.nspname, c.relname, a.attname FROM pg_attribute a JOIN pg_class c ON (a.attrelid=c.oid) JOIN pg_namespace n ON (c.relnamespace=n.oid) WHERE a.atttypid = 26 AND a.attnum > 0 AND n.nspname NOT IN ('pg_catalog', 'pg_toast', 'information_schema') AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_depend d WHERE d.refclassid = 'pg_catalog.pg_extension'::pg_catalog.regclass AND d.objid = c.oid AND d.deptype = 'e')";
+logmsg('LOG', 'Looking for large objects columns in relations');
+my $collist_query = "SELECT n.nspname, c.relname, a.attname, c.relkind, c.relispartition FROM pg_attribute a JOIN pg_class c ON (a.attrelid=c.oid) JOIN pg_namespace n ON (c.relnamespace=n.oid) WHERE a.atttypid = 26 AND a.attnum > 0 AND c.relkind IN ('r', 'p')";
 if ($#INC_SCHEMAS < 0)
 {
 	$collist_query .= " AND n.nspname NOT IN ('pg_catalog', 'pg_toast', 'information_schema') AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_depend d WHERE d.refclassid = 'pg_catalog.pg_extension'::pg_catalog.regclass AND d.objid = c.oid AND d.deptype = 'e')";
@@ -250,6 +250,7 @@ my $sth2 = $dbh->prepare($allcol_query) or die "FATAL: " . $dbh->errstr . "\n";
 
 my %collist = ();
 my %oid_collist = ();
+my %relkind = ();
 while (my $row = $sth->fetch)
 {
 	logmsg('LOG', "Found oid column in table $row->[0].$row->[1] column $row->[2].");
@@ -257,6 +258,8 @@ while (my $row = $sth->fetch)
 	{
 		logmsg('LOG', "Registering column \"$row->[2]\" from table \"$row->[0].$row->[1]\" for migration.");
 		push(@{ $oid_collist{"$row->[0].$row->[1]"} }, $row->[2]);
+		$relkind{"$row->[0].$row->[1]"}{kind} = $row->[3];
+		$relkind{"$row->[0].$row->[1]"}{ispartition} = $row->[4];
 		# Grab the full list of column for remote work
 		if ($allcol_query)
 		{
@@ -283,6 +286,15 @@ if (scalar keys %oid_collist == 0) {
 }
 
 my $procnum = 0;
+if (!$REMOTE_DBNAME)
+{
+	foreach my $tbname (sort keys %collist)
+	{
+		pre_transform($procnum, $tbname, @{ $oid_collist{$tbname} });
+		last if ($interrupt);
+	}
+}
+
 foreach my $tbname (sort keys %collist)
 {
 	last if ($interrupt);
@@ -291,7 +303,7 @@ foreach my $tbname (sort keys %collist)
 		if (!$REMOTE_DBNAME) {
 			logmsg('LOG', "Processing table $tbname locally...");
 			transform_oid_to_bytea($procnum, $tbname, @{ $oid_collist{$tbname} });
-		} else {
+		} elsif ($relkind{$tbname} ne 'p') {
 			logmsg('LOG', "Processing table $tbname remotely...");
 			remote_transform_oid_to_bytea($procnum, $tbname, \@{ $collist{$tbname} }, \@{ $oid_collist{$tbname} });
 		}
@@ -320,6 +332,15 @@ while (scalar keys %RUNNING_PIDS > 0)
                 delete $RUNNING_PIDS{$kid};
         }
         usleep(50000);
+}
+
+if (!$REMOTE_DBNAME)
+{
+	foreach my $tbname (sort keys %collist)
+	{
+		post_transform($procnum, $tbname, @{ $oid_collist{$tbname} });
+		last if ($interrupt);
+	}
 }
 
 # Now vacuum all orphan large object from the database
@@ -477,12 +498,16 @@ sub logmsg
 	$fh->close;
 }
 
-
-sub transform_oid_to_bytea
+sub pre_transform
 {
 	my ($proc, $tb, @colums) = @_;
 
 	return if ($#colums < 0);
+
+	# ALTERs will only be executed on root table
+	return if ($relkind{$tb}{ispartition});
+
+	logmsg('LOG', "Adding bytea column to table $tb locally...");
 
 	$dbh = DBI->connect("dbi:Pg:application_name=oid2bytea;dbname=$DBNAME$dbpg_opt", $DBUSER, $DBPWD, {AutoCommit => 1, InactiveDestroy => 1});
 	if (not defined $dbh) {
@@ -490,13 +515,42 @@ sub transform_oid_to_bytea
 	}
 
 	# Construct the SQL orders to execute
-	my @alter1 = ();
-	my @alter2 = ();
+	my @alter = ();
+	for (my $c = 0; $c <= $#colums; $c++)
+	{
+		push(@alter, "ALTER TABLE $tb ADD COLUMN bytea_col$c bytea");
+	}
+
+	# Add the bytea column(s)
+	foreach my $q (@alter)
+	{
+		logmsg('LOG', $q);
+		if (!$DRY_RUN) {
+			$dbh->do($q) or logmsg('ERROR', $dbh->errstr);
+		}
+	}
+
+	$dbh->disconnect();
+}
+
+sub transform_oid_to_bytea
+{
+	my ($proc, $tb, @colums) = @_;
+
+	return if ($#colums < 0);
+
+	# Update will not be executed on partitioned table, only relation
+	return if ($relkind{$tb}{kind} eq 'p');
+
+	$dbh = DBI->connect("dbi:Pg:application_name=oid2bytea;dbname=$DBNAME$dbpg_opt", $DBUSER, $DBPWD, {AutoCommit => 1, InactiveDestroy => 1});
+	if (not defined $dbh) {
+		logmsg('FATAL', "cannot connect to database $DBNAME");
+	}
+
+	# Construct the SQL orders to execute
 	my $update_sql = "UPDATE $tb SET ";
 	for (my $c = 0; $c <= $#colums; $c++)
 	{
-	
-		push(@alter1, "ALTER TABLE $tb ADD COLUMN bytea_col$c bytea");
 		$update_sql .= "bytea_col$c = ";
 		if ($FUNCTION && $FUNCTION !~ /\%/) {
 			$update_sql .= "$FUNCTION(lo_get($colums[$c])), ";
@@ -507,21 +561,10 @@ sub transform_oid_to_bytea
 		} else {
 			$update_sql .= "lo_get($colums[$c]), ";
 		}
-		push(@alter2, "ALTER TABLE $tb DROP COLUMN $colums[$c]");
-		push(@alter2, "ALTER TABLE $tb RENAME COLUMN bytea_col$c TO $colums[$c]");
 	}
 	$update_sql =~ s/, $//;
 
-	# Add the bytea column(s)
-	foreach my $q (@alter1)
-	{
-		logmsg('LOG', $q);
-		if (!$DRY_RUN) {
-			$dbh->do($q) or logmsg('ERROR', $dbh->errstr);
-		}
-	}
-
-	# Migrate the large object into the bytea column(s)
+	# Migrate the large object into the bytea column(s).
 	if ($SPLIT > 1)
 	{
 		my $procnum = 0;
@@ -550,8 +593,35 @@ sub transform_oid_to_bytea
 		update_column($update_sql, '', 0);
 	}
 
+	$dbh->disconnect();
+}
+
+sub post_transform
+{
+	my ($proc, $tb, @colums) = @_;
+
+	return if ($#colums < 0);
+
+	# ALTERs will only be executed on root table
+	return if ($relkind{$tb}{ispartition});
+
+	logmsg('LOG', "Dropping oid column and renaming bytea column in table $tb locally...");
+
+	$dbh = DBI->connect("dbi:Pg:application_name=oid2bytea;dbname=$DBNAME$dbpg_opt", $DBUSER, $DBPWD, {AutoCommit => 1, InactiveDestroy => 1});
+	if (not defined $dbh) {
+		logmsg('FATAL', "cannot connect to database $DBNAME");
+	}
+
+	# Construct the SQL orders to execute
+	my @alter = ();
+	for (my $c = 0; $c <= $#colums; $c++)
+	{
+		push(@alter, "ALTER TABLE $tb DROP COLUMN $colums[$c]");
+		push(@alter, "ALTER TABLE $tb RENAME COLUMN bytea_col$c TO $colums[$c]");
+	}
+
 	# Drop the oid column(s) and rename the bytea column(s) with the old name of the old oid column(s)
-	foreach my $q (@alter2)
+	foreach my $q (@alter)
 	{
 		logmsg('LOG', $q);
 		if (!$DRY_RUN) {
@@ -561,6 +631,7 @@ sub transform_oid_to_bytea
 
 	$dbh->disconnect();
 }
+
 
 sub remote_transform_oid_to_bytea
 {
@@ -629,8 +700,13 @@ sub update_column
 	$update_sql .= " WHERE MOD(${split_col}::bigint, $SPLIT) = $procnum - 1" if ($procnum > 0 and $split_col);
 	logmsg('LOG', $update_sql);
 	if (!$DRY_RUN) {
-		$dbh->do($update_sql) or logmsg('FATAL', $dbh->errstr);
+		if (!$dbh->do($update_sql)) {
+			logmsg('ERROR', $dbh->errstr);
+			return 0;
+		}
 	}
+
+	return 1;
 }
 
 sub forward_data
