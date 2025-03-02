@@ -34,7 +34,9 @@ my $SPLIT  = 1;
 my $NOTIME = 0;
 my $DRY_RUN    = 0;
 my $NOVACUUMLO = 0;
-my $FUNCTION = '';
+my $FUNCTION   = '';
+my $NODROP     = 0;
+my $MISSING    = 0;
 
 my @INC_TABLES  = ();
 my @INC_SCHEMAS = ();
@@ -132,6 +134,7 @@ GetOptions(
 	"H|remote-host=s"    => \$REMOTE_DBHOST,
 	"j|jobs=i"           => \$JOBS,
 	"J|job-split=i"      => \$SPLIT,
+	"m|missing!"         => \$MISSING,
 	"n|namespace=s"      => \@INC_SCHEMAS,
 	"p|port=i"           => \$DBPORT,
 	"P|remote-port=i"    => \$REMOTE_DBPORT,
@@ -141,6 +144,7 @@ GetOptions(
 	"U|remote-user=s"    => \$REMOTE_DBUSER,
 	"v|version!"         => \$VER,
 	"V|no-vacuumlo!"     => \$NOVACUUMLO,
+	"no-drop!"           => \$NODROP,
 	"no-time!"           => \$NOTIME,
 	"dry-run!"           => \$DRY_RUN,
 	"help!"              => \$HELP,
@@ -179,6 +183,7 @@ if ($DBUSER) {
 	$PG_OPT .= " -u $DBUSER";
 }
 
+# Used to serialize write to stdout output
 my $fh = new IO::File;
 $fh->open(">$TMP_LOG_FILE") or die "FATAL: can't write to temp file $TMP_LOG_FILE, $!\n";
 $fh->print();
@@ -239,8 +244,6 @@ else
 }
 $collist_query .= " ORDER BY a.attnum";
 
-#logmsg('LOG', "Using query: $collist_query");
-
 $sth = $dbh->prepare($collist_query) or die "FATAL: " . $dbh->errstr . "\n";
 $sth->execute or die "FATAL: " . $dbh->errstr . "\n";
 
@@ -285,6 +288,17 @@ if (scalar keys %oid_collist == 0) {
 	logmsg('LOG', "No large object columns found.");
 }
 
+if ($MISSING)
+{
+	foreach my $tbname (sort keys %collist)
+	{
+		verif_transform($tbname, @{ $oid_collist{$tbname} });
+		last if ($interrupt);
+	}
+	unlink($TMP_LOG_FILE);
+	exit 0;
+}
+
 my $procnum = 0;
 if (!$REMOTE_DBNAME)
 {
@@ -293,6 +307,7 @@ if (!$REMOTE_DBNAME)
 		pre_transform($procnum, $tbname, @{ $oid_collist{$tbname} });
 		last if ($interrupt);
 	}
+
 }
 
 foreach my $tbname (sort keys %collist)
@@ -388,11 +403,17 @@ will be converted to bytea.
 
 	ALTER TABLE tb1 ADD COLUMN bytea_col bytea;
 	UPDATE tb1 SET bytea_col = lo_get(lo_col);
+	UPDATE tb1 AS t1 SET bytea_col = lo_get(lo_col)
+		FROM pg_largeobject_metadata t2
+		WHERE t2.oid = t1.lo_col;
 	ALTER TABLE tb1 DROP COLUMN lo_col;
-	ALTER TABLE tb1 rename column bytea_col TO lo_col;
+	ALTER TABLE tb1 RENAME COLUMN bytea_col TO lo_col;
 
 Once all large objects are migrated the tool runs the vacuumlo command to
 remove all orphan large objects from the database.
+
+Note that all missing large object will not report error due to the JOIN in the
+update statement but you can find them look for NULL in the bytea column.
 
 WARNING: the large object data will be duplicated until the `vacuumlo` command
 is run, be sure to have enough free space.
@@ -411,6 +432,9 @@ command line options (-D, -H, -P, -U). The all the data of the table with the oi
 column(s) will be moved and the oid replaced by the content of the large object
 before being sent to the remote database.
 
+Note that missing large objects will throw an error and the data migration will
+be aborted for the table. To verify first if the table has no missing large
+objects run the command with the --missing option.
 
 **multiprocess**:
 The two modes can benefit of high speed migration by parallelizing tables
@@ -446,6 +470,8 @@ options:
   -H, --dest-host HOSTNAME   remote database server host or socket directory.
   -j, --job NUM              use this many parallel jobs to process all tables.
   -J, --job-split NUM        use this many parallel jobs to process single table
+  -m, --missing              show missing large objects for a table and do not
+                             perform any migration.
   -n, --namespace NAME       process tables created under the given schema.
                              Can be used multiple time.
   -p, --port PORT            database server port number, default: 5432.
@@ -459,6 +485,8 @@ options:
   -V, --no-vacuumlo          do not run vacuumlo at end to remove orphan large
                              objects.
   --help                     show usage.
+  --no-drop                  don't drop the oid column, rename it to oid_colN
+                             instead. N depends on the number of the oid column.
   --no-time                  don't show timestamp in log output.
   --dry-run                  do not do anything, just show what will be done.
 
@@ -533,6 +561,45 @@ sub pre_transform
 	$dbh->disconnect();
 }
 
+sub verif_transform
+{
+	my ($tb, @colums) = @_;
+
+	return if ($#colums < 0);
+
+	# ALTERs will only be executed on root table
+	return if ($relkind{$tb}{ispartition});
+
+
+	$dbh = DBI->connect("dbi:Pg:application_name=oid2bytea;dbname=$DBNAME$dbpg_opt", $DBUSER, $DBPWD, {AutoCommit => 1, InactiveDestroy => 1});
+	if (not defined $dbh) {
+		logmsg('FATAL', "cannot connect to database $DBNAME");
+	}
+
+	# Construct the SQL orders to execute
+	my @alter = ();
+	for (my $c = 0; $c <= $#colums; $c++)
+	{
+		logmsg('LOG', "Verifying if column $tb.$colums[$c] has missing large objects that will make lo_get() fail...");
+		my $q = "SELECT t1.$colums[$c] FROM $tb t1 WHERE NOT EXISTS (SELECT 1 FROM pg_largeobject_metadata WHERE oid = t1.$colums[$c]);";
+		my $s = $dbh->prepare($q) or die "FATAL: " . $dbh->errstr . "\n";
+		$s->execute or die "FATAL: " . $dbh->errstr . "\n";
+		my @missing = ();
+		while (my $row = $s->fetch)
+		{
+			push(@missing, $row->[0]);
+		}
+		$s->finish;
+		if ($#missing >= 0) {
+			logmsg('LOG', "  The following oids are missing: " . join(',', @missing));
+		} else {
+			logmsg('LOG', "  No oids are missing");
+		}
+	}
+
+	$dbh->disconnect();
+}
+
 sub transform_oid_to_bytea
 {
 	my ($proc, $tb, @colums) = @_;
@@ -548,49 +615,48 @@ sub transform_oid_to_bytea
 	}
 
 	# Construct the SQL orders to execute
-	my $update_sql = "UPDATE $tb SET ";
 	for (my $c = 0; $c <= $#colums; $c++)
 	{
-		$update_sql .= "bytea_col$c = ";
+		my $update_sql = "UPDATE $tb AS t1 SET bytea_col$c = ";
 		if ($FUNCTION && $FUNCTION !~ /\%/) {
-			$update_sql .= "$FUNCTION(lo_get($colums[$c])), ";
+			$update_sql .= "$FUNCTION(lo_get($colums[$c])) ";
 		} elsif ($FUNCTION && $FUNCTION =~ /\%/) {
 			my $fct = $FUNCTION;
 			$fct =~ s/\%/lo_get($colums[$c])/g;
-			$update_sql .= "$fct, ";
+			$update_sql .= "$fct ";
 		} else {
-			$update_sql .= "lo_get($colums[$c]), ";
+			$update_sql .= "lo_get($colums[$c]) ";
 		}
-	}
-	$update_sql =~ s/, $//;
+		$update_sql .= " FROM pg_largeobject_metadata t2 WHERE t2.oid = t1.$colums[$c]";
 
-	# Migrate the large object into the bytea column(s).
-	if ($SPLIT > 1)
-	{
-		my $procnum = 0;
-		for my $splitnum (1 .. $SPLIT)
+		# Migrate the large object into the bytea column(s).
+		if ($SPLIT > 1)
 		{
-			logmsg('LOG', "Processing table $tb on chunk $splitnum on column $colums[0]...");
-			spawn sub {
-				update_column($update_sql, $colums[0], $splitnum);
-			};
-			$procnum++;
-		}
-		while ($procnum > 0)
-		{
-			my $kid = waitpid(-1, WNOHANG);
-			if ($kid > 0)
+			my $procnum = 0;
+			for my $splitnum (1 .. $SPLIT)
 			{
-				$procnum--;
-				delete $RUNNING_PIDS{$kid};
-				last;
+				logmsg('LOG', "Processing table $tb on chunk $splitnum on column $colums[0]...");
+				spawn sub {
+					update_column($update_sql, "t1.$colums[$c]", $splitnum);
+				};
+				$procnum++;
 			}
-			usleep(50000);
+			while ($procnum > 0)
+			{
+				my $kid = waitpid(-1, WNOHANG);
+				if ($kid > 0)
+				{
+					$procnum--;
+					delete $RUNNING_PIDS{$kid};
+					last;
+				}
+				usleep(50000);
+			}
 		}
-	}
-	else
-	{
-		update_column($update_sql, '', 0);
+		else
+		{
+			update_column($update_sql, '', 0);
+		}
 	}
 
 	$dbh->disconnect();
@@ -605,7 +671,9 @@ sub post_transform
 	# ALTERs will only be executed on root table
 	return if ($relkind{$tb}{ispartition});
 
-	logmsg('LOG', "Dropping oid column and renaming bytea column in table $tb locally...");
+	my $action = 'Renaming';
+	$action = 'Dropping' if (!$NODROP);
+	logmsg('LOG', "$action oid column and renaming bytea column in table $tb locally...");
 
 	$dbh = DBI->connect("dbi:Pg:application_name=oid2bytea;dbname=$DBNAME$dbpg_opt", $DBUSER, $DBPWD, {AutoCommit => 1, InactiveDestroy => 1});
 	if (not defined $dbh) {
@@ -616,7 +684,11 @@ sub post_transform
 	my @alter = ();
 	for (my $c = 0; $c <= $#colums; $c++)
 	{
-		push(@alter, "ALTER TABLE $tb DROP COLUMN $colums[$c]");
+		if ( !$NODROP ) {
+			push(@alter, "ALTER TABLE $tb DROP COLUMN $colums[$c]");
+		} else {
+			push(@alter, "ALTER TABLE $tb RENAME COLUMN $colums[$c] TO oid_col$c");
+		}
 		push(@alter, "ALTER TABLE $tb RENAME COLUMN bytea_col$c TO $colums[$c]");
 	}
 
@@ -697,16 +769,12 @@ sub update_column
 {
 	my ($update_sql, $split_col, $procnum) = @_;
 
-	$update_sql .= " WHERE MOD(${split_col}::bigint, $SPLIT) = $procnum - 1" if ($procnum > 0 and $split_col);
+	$update_sql .= " AND MOD(${split_col}::bigint, $SPLIT) = $procnum - 1" if ($procnum > 0 and $split_col);
 	logmsg('LOG', $update_sql);
-	if (!$DRY_RUN) {
-		if (!$dbh->do($update_sql)) {
-			logmsg('ERROR', $dbh->errstr);
-			return 0;
-		}
+	if (!$DRY_RUN)
+	{
+		$dbh->do($update_sql) or logmsg('ERROR', $dbh->errstr);
 	}
-
-	return 1;
 }
 
 sub forward_data

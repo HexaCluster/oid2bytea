@@ -7,12 +7,12 @@ CREATE TABLE
 Migrate only one table remotely
 LOG: Connection to PostgreSQL successfull
 LOG: Starting conversion of large objects to bytea
-LOG: Looking for large objects columns
+LOG: Looking for large objects columns in relations
 LOG: Found oid column in table public.test_oid1 column bindata.
 LOG: Registering column "bindata" from table "public.test_oid1" for migration.
-LOG: Found oid column in table sch2.test_oid3 column bindata.
-LOG: Skiping, not in table list.
 LOG: Found oid column in table sch1.test_oid2 column bindata.
+LOG: Skiping, not in table list.
+LOG: Found oid column in table sch2.test_oid3 column bindata.
 LOG: Skiping, not in table list.
 LOG: Processing table public.test_oid1 remotely...
 LOG: COPY (SELECT id, lo_get(bindata) FROM public.test_oid1) TO PROGRAM 'psql -X  -d oid2bytea_test_dest -p 5432 -c "\\copy public.test_oid1 FROM stdin"'
@@ -37,7 +37,7 @@ must NOT have been migrated
 Migrate all tables from schema sch1 remotely
 LOG: Connection to PostgreSQL successfull
 LOG: Starting conversion of large objects to bytea
-LOG: Looking for large objects columns
+LOG: Looking for large objects columns in relations
 LOG: Found oid column in table sch1.test_oid2 column bindata.
 LOG: Registering column "bindata" from table "sch1.test_oid2" for migration.
 LOG: Processing table sch1.test_oid2 remotely...
@@ -56,13 +56,13 @@ LOG: convertion ended
 Migrate all remaining table remotely
 LOG: Connection to PostgreSQL successfull
 LOG: Starting conversion of large objects to bytea
-LOG: Looking for large objects columns
+LOG: Looking for large objects columns in relations
 LOG: Found oid column in table public.test_oid1 column bindata.
 LOG: Registering column "bindata" from table "public.test_oid1" for migration.
-LOG: Found oid column in table sch2.test_oid3 column bindata.
-LOG: Registering column "bindata" from table "sch2.test_oid3" for migration.
 LOG: Found oid column in table sch1.test_oid2 column bindata.
 LOG: Registering column "bindata" from table "sch1.test_oid2" for migration.
+LOG: Found oid column in table sch2.test_oid3 column bindata.
+LOG: Registering column "bindata" from table "sch2.test_oid3" for migration.
 LOG: Processing table public.test_oid1 remotely...
 LOG: COPY (SELECT id, lo_get(bindata) FROM public.test_oid1) TO PROGRAM 'psql -X  -d oid2bytea_test_dest -p 5432 -c "\\copy public.test_oid1 FROM stdin"'
 LOG: Processing table sch1.test_oid2 remotely...
@@ -86,11 +86,11 @@ CREATE TABLE
 Migrating 2 tables at a time splitted by 4 remotely
  count |   sum   
 -------+---------
-  1000 | 7312000
+  1000 | 7736000
 (1 row)
 
  count |   sum    
 -------+----------
-  2000 | 14624000
+  2000 | 15472000
 (1 row)
 

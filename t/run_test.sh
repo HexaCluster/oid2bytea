@@ -15,6 +15,8 @@ psql -d oid2bytea_test -c "INSERT INTO test_oid1 VALUES (1, ( SELECT lo_import('
 if [ $? -ne 0 ]; then
 	exit 3
 fi
+# insert missing oid
+psql -d oid2bytea_test -c "INSERT INTO test_oid1 VALUES (1, 1234);" >> output.txt
 
 psql -d oid2bytea_test -c "CREATE SCHEMA sch1;" >> output.txt
 psql -d oid2bytea_test -c "CREATE TABLE sch1.test_oid2 (id integer, bindata oid);" >> output.txt
@@ -35,6 +37,9 @@ psql -d oid2bytea_test -c "INSERT INTO sch2.test_oid3 VALUES (1, ( SELECT lo_imp
 if [ $? -ne 0 ]; then
 	exit 3
 fi
+
+echo "Verify missing oid" >> output.txt
+perl oid2bytea -d oid2bytea_test --missing --no-time >> output.txt
 
 echo "Migrate only one table" >> output.txt
 perl oid2bytea -d oid2bytea_test -t test_oid1 --no-time >> output.txt
@@ -106,7 +111,7 @@ if [ $? -ne 0 ]; then
 	exit 3
 fi
 
-echo "Migrating 2 table at a time splitted by 4" >> output.txt
+echo "Migrating 2 tables at a time splitted by 4" >> output.txt
 
 perl oid2bytea -j 2 -J 4 -d oid2bytea_test --no-time
 if [ $? -ne 0 ]; then
