@@ -7,7 +7,7 @@ fi
 # copy this program into /tmp to be used as a large object
 cp -f $0 /tmp/
 
-psql -d oid2bytea_test -c "CREATE TABLE test_oid1 (id integer, bindata oid);" >> output.txt 2>&1
+psql -d oid2bytea_test -c "CREATE TABLE test_oid1 (id integer, bindata oid NOT NULL);" >> output.txt 2>&1
 if [ $? -ne 0 ]; then
 	exit 2
 fi

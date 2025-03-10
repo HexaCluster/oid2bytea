@@ -36,7 +36,8 @@ LOG: Skiping, not in table list.
 LOG: Found oid column in table sch2.test_oid3 column bindata.
 LOG: Skiping, not in table list.
 LOG: Adding bytea column to table public.test_oid1 locally...
-LOG: ALTER TABLE public.test_oid1 ADD COLUMN bytea_col0 bytea
+LOG: ALTER TABLE public.test_oid1 ADD COLUMN bytea_col0 bytea DEFAULT ''::bytea
+LOG: ALTER TABLE public.test_oid1 ALTER COLUMN bytea_col0 SET NOT NULL
 LOG: Processing table public.test_oid1 locally...
 LOG: UPDATE public.test_oid1 SET  bytea_col0 = (CASE WHEN bindata = 0 THEN ''::bytea ELSE lo_get(bindata)  END)
 LOG: Dropping oid column and renaming bytea column in table public.test_oid1 locally...
@@ -116,11 +117,11 @@ INSERT 0 2000
 Migrating 2 tables at a time splitted by 4
  count |   sum   
 -------+---------
-  1000 | 8174000
+  1000 | 8192000
 (1 row)
 
  count |   sum    
 -------+----------
-  2000 | 16348000
+  2000 | 16384000
 (1 row)
 
