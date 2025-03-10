@@ -24,6 +24,7 @@ LOG: Verifying if column sch1.test_oid2.bindata has missing large objects that w
 LOG:   No oids are missing
 LOG: Verifying if column sch2.test_oid3.bindata has missing large objects that will make lo_get() fail...
 LOG:   No oids are missing
+UPDATE 1
 Migrate only one table
 LOG: Connection to PostgreSQL successfull
 LOG: Starting conversion of large objects to bytea
@@ -37,7 +38,7 @@ LOG: Skiping, not in table list.
 LOG: Adding bytea column to table public.test_oid1 locally...
 LOG: ALTER TABLE public.test_oid1 ADD COLUMN bytea_col0 bytea
 LOG: Processing table public.test_oid1 locally...
-LOG: UPDATE public.test_oid1 AS t1 SET bytea_col0 = lo_get(bindata)  FROM pg_largeobject_metadata t2 WHERE t2.oid = t1.bindata
+LOG: UPDATE public.test_oid1 SET  bytea_col0 = (CASE WHEN bindata = 0 THEN ''::bytea ELSE lo_get(bindata)  END)
 LOG: Dropping oid column and renaming bytea column in table public.test_oid1 locally...
 LOG: ALTER TABLE public.test_oid1 DROP COLUMN bindata
 LOG: ALTER TABLE public.test_oid1 RENAME COLUMN bytea_col0 TO bindata
@@ -46,8 +47,8 @@ LOG: convertion ended
 must have been migrated
                                       substr                                      
 ----------------------------------------------------------------------------------
- 
  \x6563686f202243726561746520746865207465737420646174616261736522203e206f75747075
+ \x
 (2 rows)
 
 must NOT have been migrated
@@ -71,7 +72,7 @@ LOG: Registering column "bindata" from table "sch1.test_oid2" for migration.
 LOG: Adding bytea column to table sch1.test_oid2 locally...
 LOG: ALTER TABLE sch1.test_oid2 ADD COLUMN bytea_col0 bytea
 LOG: Processing table sch1.test_oid2 locally...
-LOG: UPDATE sch1.test_oid2 AS t1 SET bytea_col0 = lo_get(bindata)  FROM pg_largeobject_metadata t2 WHERE t2.oid = t1.bindata
+LOG: UPDATE sch1.test_oid2 SET  bytea_col0 = lo_get(bindata) 
 LOG: Dropping oid column and renaming bytea column in table sch1.test_oid2 locally...
 LOG: ALTER TABLE sch1.test_oid2 DROP COLUMN bindata
 LOG: ALTER TABLE sch1.test_oid2 RENAME COLUMN bytea_col0 TO bindata
@@ -96,7 +97,7 @@ LOG: Registering column "bindata" from table "sch2.test_oid3" for migration.
 LOG: Adding bytea column to table sch2.test_oid3 locally...
 LOG: ALTER TABLE sch2.test_oid3 ADD COLUMN bytea_col0 bytea
 LOG: Processing table sch2.test_oid3 locally...
-LOG: UPDATE sch2.test_oid3 AS t1 SET bytea_col0 = lo_get(bindata)  FROM pg_largeobject_metadata t2 WHERE t2.oid = t1.bindata
+LOG: UPDATE sch2.test_oid3 SET  bytea_col0 = lo_get(bindata) 
 LOG: Dropping oid column and renaming bytea column in table sch2.test_oid3 locally...
 LOG: ALTER TABLE sch2.test_oid3 DROP COLUMN bindata
 LOG: ALTER TABLE sch2.test_oid3 RENAME COLUMN bytea_col0 TO bindata
@@ -115,11 +116,11 @@ INSERT 0 2000
 Migrating 2 tables at a time splitted by 4
  count |   sum   
 -------+---------
-  1000 | 7736000
+  1000 | 8174000
 (1 row)
 
  count |   sum    
 -------+----------
-  2000 | 15472000
+  2000 | 16348000
 (1 row)
 

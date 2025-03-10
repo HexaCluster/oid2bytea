@@ -3,7 +3,28 @@
 ### Description
 
 Program used to convert large objects columns in a PostgreSQL database into
-bytea. Two migration modes are supported: local and remote.
+bytea.
+
+Before running the migration be sure that there are no missing large objects
+(the oid have no entries in the pg_largeobject_metadata table) because the
+migration of the table will fail. To check any missing large object run first
+oid2bytea with the --missing option, for example:
+
+    ./oid2bytea -d testdb --missing
+    LOG: Verifying if column public.test_oid1.bindata has missing large objects that will make lo_get() fail...
+    LOG:   The following oids are missing: 1234
+
+Then you can update the column to NULL on this record:
+
+    UPDATE test_oid1 SET bindata = NULL WHERE bindata IN (1234);
+
+If the column has a NOT NULL constraint you can set the value to 0 and run
+oid2bytea with option -z or --zero-to-emty to set the value to an empty bytea
+during the data migration.
+
+### Running modes
+
+Two migration modes are supported: local and remote.
 
 #### local
 
@@ -15,17 +36,12 @@ will be converted to bytea.
 ```
 ALTER TABLE tb1 ADD COLUMN bytea_col bytea;
 UPDATE tb1 SET bytea_col = lo_get(lo_col);
-UPDATE tb1 AS t1 SET bytea_col = lo_get(lo_col)
-    FROM pg_largeobject_metadata t2
-    WHERE t2.oid = t1.lo_col;
+UPDATE tb1 AS t1 SET bytea_col = lo_get(lo_col);
 ALTER TABLE tb1 DROP COLUMN lo_col;
 ALTER TABLE tb1 RENAME COLUMN bytea_col TO lo_col;
 ```
 Once all large objects are migrated the tool runs the vacuumlo command to
 remove all orphan large objects from the database.
-
-Note that all missing large object will not report error due to the JOIN in the
-update statement but you can find them look for NULL in the bytea column.
 
 WARNING: the large object data will be duplicated until the `vacuumlo` command
 is run, be sure to have enough free space.
@@ -36,7 +52,7 @@ the oid column(s).
 Also take care in your application that the bytea column(s) are appended at end
 of the table so their attribute position number change.
 
-Be adviszd to make a backup of your tables with large objects oid columns before
+Be advised to make a backup of your tables with large objects oid columns before
 running this tool. They will be dropped unless you use the `--no-drop` option.
 
 #### remote
@@ -120,6 +136,10 @@ options:
   -v, --version              show program version.
   -V, --no-vacuumlo          do not run vacuumlo at end to remove orphan large
                              objects.
+  -z, --zero-to-empty        convert oid with value 0 to an empty bytea. This is
+                             useful when the oid column has a not null constraint
+			     and that there are missing large objects. They will
+			     be converted as en empty bytea instead of null.
   --help                     show usage.
   --no-drop                  don't drop the oid column, rename it to oid_colN
                              instead. N depends on the number of the oid column.

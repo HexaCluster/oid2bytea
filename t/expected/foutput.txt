@@ -4,7 +4,7 @@ INSERT 0 1000
 CREATE TABLE
  count |   sum    
 -------+----------
-  4000 | 15468000
+  4000 | 16344000
 (1 row)
 
    substr   

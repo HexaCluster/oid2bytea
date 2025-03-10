@@ -10,4 +10,4 @@ my @ret = `diff routput.txt t/expected/routput.txt`;
 ok( $#ret < 0, "not the expected remote output, see diff:\n@ret");
 
 
-#`rm routput.txt`;
+`rm routput.txt`;
