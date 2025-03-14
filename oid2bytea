@@ -262,6 +262,9 @@ while (my $row = $sth->fetch)
 	if ($#INC_TABLES < 0 || grep(/^$row->[1]$/, @INC_TABLES) || grep(/^$row->[0].$row->[1]$/, @INC_TABLES))
 	{
 		logmsg('LOG', "Registering column \"$row->[2]\" from table \"$row->[0].$row->[1]\" for migration.");
+		$row->[0] = '"' . $row->[0] . '"' if ($row->[0] =~ /[^a-z\$0-9_]/);
+		$row->[1] = '"' . $row->[1] . '"' if ($row->[1] =~ /[^a-z\$0-9_]/);
+		$row->[2] = '"' . $row->[2] . '"' if ($row->[2] =~ /[^a-z\$0-9_]/);
 		push(@{ $oid_collist{"$row->[0].$row->[1]"} }, $row->[2]);
 		$relkind{"$row->[0].$row->[1]"}{kind} = $row->[3];
 		$relkind{"$row->[0].$row->[1]"}{ispartition} = $row->[4];
@@ -269,9 +272,14 @@ while (my $row = $sth->fetch)
 		# Grab the full list of column for remote work
 		if ($allcol_query)
 		{
-			$sth2->execute($row->[0], $row->[1]) or die "FATAL: " . $dbh->errstr . "\n";
+			my $sch = $row->[0];
+			my $tbn = $row->[1];
+			$sch =~ s/"//g;
+			$tbn =~ s/"//g;
+			$sth2->execute($sch, $tbn) or die "FATAL: " . $dbh->errstr . "\n";
 			while (my $r = $sth2->fetch)
 			{
+				$r->[0] = '"' . $r->[0] . '"' if ($r->[0] =~ /[^a-z\$0-9_]/);
 				push(@{ $collist{"$row->[0].$row->[1]"} }, $r->[0]);
 			}
 		}

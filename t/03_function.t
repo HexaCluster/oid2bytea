@@ -10,4 +10,4 @@ my @ret = `diff foutput.txt t/expected/foutput.txt`;
 ok( $#ret < 0, "not the expected function+remote output, see diff:\n@ret");
 
 
-`rm foutput.txt`;
+#`rm foutput.txt`;

@@ -16,13 +16,13 @@ LOG: Found oid column in table public.test_oid1 column bindata.
 LOG: Registering column "bindata" from table "public.test_oid1" for migration.
 LOG: Found oid column in table sch1.test_oid2 column bindata.
 LOG: Registering column "bindata" from table "sch1.test_oid2" for migration.
-LOG: Found oid column in table sch2.test_oid3 column bindata.
-LOG: Registering column "bindata" from table "sch2.test_oid3" for migration.
+LOG: Found oid column in table SCH2.test_oid3 column BINDATA.
+LOG: Registering column "BINDATA" from table "SCH2.test_oid3" for migration.
+LOG: Verifying if column "SCH2".test_oid3."BINDATA" has missing large objects that will make lo_get() fail...
+LOG:   No oids are missing
 LOG: Verifying if column public.test_oid1.bindata has missing large objects that will make lo_get() fail...
 LOG:   The following oids are missing: 1234
 LOG: Verifying if column sch1.test_oid2.bindata has missing large objects that will make lo_get() fail...
-LOG:   No oids are missing
-LOG: Verifying if column sch2.test_oid3.bindata has missing large objects that will make lo_get() fail...
 LOG:   No oids are missing
 UPDATE 1
 Migrate only one table
@@ -33,7 +33,7 @@ LOG: Found oid column in table public.test_oid1 column bindata.
 LOG: Registering column "bindata" from table "public.test_oid1" for migration.
 LOG: Found oid column in table sch1.test_oid2 column bindata.
 LOG: Skiping, not in table list.
-LOG: Found oid column in table sch2.test_oid3 column bindata.
+LOG: Found oid column in table SCH2.test_oid3 column BINDATA.
 LOG: Skiping, not in table list.
 LOG: Adding bytea column to table public.test_oid1 locally...
 LOG: ALTER TABLE public.test_oid1 ADD COLUMN bytea_col0 bytea DEFAULT ''::bytea
@@ -93,15 +93,15 @@ Migrate all remaining table
 LOG: Connection to PostgreSQL successfull
 LOG: Starting conversion of large objects to bytea
 LOG: Looking for large objects columns in relations
-LOG: Found oid column in table sch2.test_oid3 column bindata.
-LOG: Registering column "bindata" from table "sch2.test_oid3" for migration.
-LOG: Adding bytea column to table sch2.test_oid3 locally...
-LOG: ALTER TABLE sch2.test_oid3 ADD COLUMN bytea_col0 bytea
-LOG: Processing table sch2.test_oid3 locally...
-LOG: UPDATE sch2.test_oid3 SET  bytea_col0 = lo_get(bindata) 
-LOG: Dropping oid column and renaming bytea column in table sch2.test_oid3 locally...
-LOG: ALTER TABLE sch2.test_oid3 DROP COLUMN bindata
-LOG: ALTER TABLE sch2.test_oid3 RENAME COLUMN bytea_col0 TO bindata
+LOG: Found oid column in table SCH2.test_oid3 column BINDATA.
+LOG: Registering column "BINDATA" from table "SCH2.test_oid3" for migration.
+LOG: Adding bytea column to table "SCH2".test_oid3 locally...
+LOG: ALTER TABLE "SCH2".test_oid3 ADD COLUMN bytea_col0 bytea
+LOG: Processing table "SCH2".test_oid3 locally...
+LOG: UPDATE "SCH2".test_oid3 SET  bytea_col0 = lo_get("BINDATA") 
+LOG: Dropping oid column and renaming bytea column in table "SCH2".test_oid3 locally...
+LOG: ALTER TABLE "SCH2".test_oid3 DROP COLUMN "BINDATA"
+LOG: ALTER TABLE "SCH2".test_oid3 RENAME COLUMN bytea_col0 TO "BINDATA"
 LOG: Running vacuumlo on the database to remove orphan large object
 LOG: convertion ended
                                       substr                                      
@@ -117,11 +117,11 @@ INSERT 0 2000
 Migrating 2 tables at a time splitted by 4
  count |   sum   
 -------+---------
-  1000 | 8192000
+  1000 | 8272000
 (1 row)
 
  count |   sum    
 -------+----------
-  2000 | 16384000
+  2000 | 16544000
 (1 row)
 

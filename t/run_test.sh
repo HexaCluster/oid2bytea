@@ -28,12 +28,12 @@ if [ $? -ne 0 ]; then
 	exit 3
 fi
 
-psql -d oid2bytea_test -c "CREATE SCHEMA sch2;" >> output.txt 2>&1
-psql -d oid2bytea_test -c "CREATE TABLE sch2.test_oid3 (id integer, bindata oid);" >> output.txt 2>&1
+psql -d oid2bytea_test -c "CREATE SCHEMA \"SCH2\";" >> output.txt 2>&1
+psql -d oid2bytea_test -c "CREATE TABLE \"SCH2\".test_oid3 (id integer, \"BINDATA\" oid);" >> output.txt 2>&1
 if [ $? -ne 0 ]; then
 	exit 2
 fi
-psql -d oid2bytea_test -c "INSERT INTO sch2.test_oid3 VALUES (1, ( SELECT lo_import('/tmp/run_test.sh') ));" >> output.txt 2>&1
+psql -d oid2bytea_test -c "INSERT INTO \"SCH2\".test_oid3 VALUES (1, ( SELECT lo_import('/tmp/run_test.sh') ));" >> output.txt 2>&1
 if [ $? -ne 0 ]; then
 	exit 3
 fi
@@ -61,7 +61,7 @@ if [ $? -ne 0 ]; then
 fi
 
 echo "must NOT have been migrated" >> output.txt
-psql -d oid2bytea_test -c "SELECT length(bindata::text) FROM sch2.test_oid3;" >> output.txt 2>&1
+psql -d oid2bytea_test -c "SELECT length(\"BINDATA\"::text) FROM \"SCH2\".test_oid3;" >> output.txt 2>&1
 if [ $? -ne 0 ]; then
 	exit 7
 fi
@@ -77,7 +77,7 @@ if [ $? -ne 0 ]; then
 	exit 5
 fi
 
-psql -d oid2bytea_test -c "SELECT length(bindata::text) FROM sch2.test_oid3;" >> output.txt 2>&1
+psql -d oid2bytea_test -c "SELECT length(\"BINDATA\"::text) FROM \"SCH2\".test_oid3;" >> output.txt 2>&1
 if [ $? -ne 0 ]; then
 	exit 6
 fi
@@ -88,7 +88,7 @@ if [ $? -ne 0 ]; then
 	exit 4
 fi
 
-psql -d oid2bytea_test -c "SELECT substr(bindata::text, 1, 80) FROM sch2.test_oid3;" >> output.txt 2>&1
+psql -d oid2bytea_test -c "SELECT substr(\"BINDATA\"::text, 1, 80) FROM \"SCH2\".test_oid3;" >> output.txt 2>&1
 if [ $? -ne 0 ]; then
 	exit 6
 fi

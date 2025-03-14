@@ -86,11 +86,11 @@ CREATE TABLE
 Migrating 2 tables at a time splitted by 4 remotely
  count |   sum   
 -------+---------
-  1000 | 8192000
+  1000 | 8272000
 (1 row)
 
  count |   sum    
 -------+----------
-  2000 | 16384000
+  2000 | 16544000
 (1 row)
 
