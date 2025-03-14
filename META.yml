@@ -1,0 +1,9 @@
+name:         oid2bytea
+version:      1.0
+version_from: oid2bytea
+installdirs:  site
+requires:
+    Time::HiRes:                     0
+
+distribution_type: script
+generated_by: ExtUtils::MakeMaker version 6.17
