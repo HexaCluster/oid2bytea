@@ -193,6 +193,7 @@ $fh->close();
 
 # Set remote PostgreSQL related options
 if ($REMOTE_DBNAME) {
+	$REMOTE_DBNAME = '"' . $REMOTE_DBNAME . '"' if ($REMOTE_DBNAME =~ /[^a-z0-9_$]/);
 	$REMOTE_PG_OPT .= " -d $REMOTE_DBNAME";
 }
 if ($REMOTE_DBHOST) {
@@ -202,6 +203,7 @@ if ($REMOTE_DBPORT) {
 	$REMOTE_PG_OPT .= " -p $REMOTE_DBPORT";
 }
 if ($REMOTE_DBUSER) {
+	$REMOTE_DBUSER = '"' . $REMOTE_DBUSER . '"' if ($REMOTE_DBUSER =~ /[^a-z0-9_$]/);
 	$REMOTE_PG_OPT .= " -U $REMOTE_DBUSER";
 }
 
