@@ -102,6 +102,16 @@ oid2bytea is a Perl program that require the following Perl modules:
 Your Linux distribution must already have binary packages but all Perl modules
 are available on [CPAN](https://www.cpan.org/)
 
+### Installation
+
+Run the following commands:
+```
+perl Makefile.PL
+make
+sudo make install
+```
+By default oid2bytea will be installed in `/usr/local/bin/`
+
 ### Tests
 
 Just execute the following command: `prove`
