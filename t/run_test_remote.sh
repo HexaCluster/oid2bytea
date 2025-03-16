@@ -26,12 +26,12 @@ if [ $? -ne 0 ]; then
 	exit 3
 fi
 
-psql -d oid2bytea_test_src -c "CREATE SCHEMA sch2;" >> routput.txt
-psql -d oid2bytea_test_src -c "CREATE TABLE sch2.test_oid3 (id integer, bindata oid);" >> routput.txt
+psql -d oid2bytea_test_src -c 'CREATE SCHEMA "SCH2";' >> routput.txt
+psql -d oid2bytea_test_src -c 'CREATE TABLE "SCH2".test_oid3 (id integer, bindata oid);' >> routput.txt
 if [ $? -ne 0 ]; then
 	exit 2
 fi
-psql -d oid2bytea_test_src -c "INSERT INTO sch2.test_oid3 VALUES (1, ( SELECT lo_import('/tmp/run_test.sh') ));" >> routput.txt
+psql -d oid2bytea_test_src -c "INSERT INTO \"SCH2\".test_oid3 VALUES (1, ( SELECT lo_import('/tmp/run_test.sh') ));" >> routput.txt
 if [ $? -ne 0 ]; then
 	exit 3
 fi
@@ -54,8 +54,8 @@ if [ $? -ne 0 ]; then
 	exit 2
 fi
 
-psql -d "OID2BYTEA_TEST_DEST" -c "CREATE SCHEMA sch2;" >> routput.txt
-psql -d "OID2BYTEA_TEST_DEST" -c "CREATE TABLE sch2.test_oid3 (id integer, bindata bytea);" >> routput.txt
+psql -d "OID2BYTEA_TEST_DEST" -c 'CREATE SCHEMA "SCH2";' >> routput.txt
+psql -d "OID2BYTEA_TEST_DEST" -c 'CREATE TABLE "SCH2".test_oid3 (id integer, bindata bytea);' >> routput.txt
 if [ $? -ne 0 ]; then
 	exit 2
 fi
@@ -80,7 +80,7 @@ if [ $? -ne 0 ]; then
 fi
 
 echo "must NOT have been migrated" >> routput.txt
-psql -d "OID2BYTEA_TEST_DEST" -c "SELECT length(bindata::text) FROM sch2.test_oid3;" >> routput.txt
+psql -d "OID2BYTEA_TEST_DEST" -c 'SELECT length(bindata::text) FROM "SCH2".test_oid3;' >> routput.txt
 if [ $? -ne 0 ]; then
 	exit 7
 fi
@@ -96,7 +96,7 @@ if [ $? -ne 0 ]; then
 	exit 5
 fi
 
-psql -d "OID2BYTEA_TEST_DEST" -c "SELECT length(bindata::text) FROM sch2.test_oid3;" >> routput.txt
+psql -d "OID2BYTEA_TEST_DEST" -c 'SELECT length(bindata::text) FROM "SCH2".test_oid3;' >> routput.txt
 if [ $? -ne 0 ]; then
 	exit 6
 fi
@@ -107,7 +107,7 @@ if [ $? -ne 0 ]; then
 	exit 4
 fi
 
-psql -d "OID2BYTEA_TEST_DEST" -c "SELECT substr(bindata::text, 1, 80) FROM sch2.test_oid3;" >> routput.txt
+psql -d "OID2BYTEA_TEST_DEST" -c 'SELECT substr(bindata::text, 1, 80) FROM "SCH2".test_oid3;' >> routput.txt
 if [ $? -ne 0 ]; then
 	exit 6
 fi

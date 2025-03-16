@@ -688,6 +688,9 @@ sub remote_transform_oid_to_bytea
 
 	return if ($#{$oid_colums} < 0);
 
+	my $tb_quoted = $tb;
+	$tb_quoted =~ s/"/\\"/g;
+
 	my $query_get = '';
 	foreach my $c (@$all_columns)
 	{
@@ -716,7 +719,8 @@ sub remote_transform_oid_to_bytea
 	$query_get .= ' FROM ' . $tb;
 
 	$query_get .= " WHERE MOD($oid_colums->[0]::bigint, $SPLIT) = " . ($procnum - 1) if ($procnum > 0 and $oid_colums->[0]);
-	$query_get = qq{COPY (SELECT $query_get) TO PROGRAM 'psql -X $REMOTE_PG_OPT -c "\\\\copy $tb FROM stdin"'};
+
+	$query_get = qq{COPY (SELECT $query_get) TO PROGRAM 'psql -X $REMOTE_PG_OPT -c "\\\\copy $tb_quoted FROM stdin"'};
 
 	# Construct the SQL query to get data
 	if ($SPLIT > 1)
