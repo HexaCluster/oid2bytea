@@ -237,7 +237,7 @@ logmsg('LOG', 'Starting conversion of large objects to bytea');
 
 # Get oid columns to migrate
 logmsg('LOG', 'Looking for large objects columns in relations');
-my $collist_query = "SELECT n.nspname, c.relname, a.attname, c.relkind, c.relispartition, a.attnotnull FROM pg_attribute a JOIN pg_class c ON (a.attrelid=c.oid) JOIN pg_namespace n ON (c.relnamespace=n.oid) WHERE a.atttypid = 26 AND a.attnum > 0 AND c.relkind IN ('r', 'p')";
+my $collist_query = "SELECT n.nspname, c.relname, a.attname, c.relkind, c.relispartition, a.attnotnull FROM pg_attribute a JOIN pg_class c ON (a.attrelid=c.oid) JOIN pg_namespace n ON (c.relnamespace=n.oid) WHERE a.atttypid = 26 AND a.attnum > 0 AND c.relkind IN 'r'";
 if ($#INC_SCHEMAS < 0)
 {
 	$collist_query .= " AND n.nspname NOT IN ('pg_catalog', 'pg_toast', 'information_schema') AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_depend d WHERE d.refclassid = 'pg_catalog.pg_extension'::pg_catalog.regclass AND d.objid = c.oid AND d.deptype = 'e')";
@@ -687,6 +687,9 @@ sub remote_transform_oid_to_bytea
 	my ($proc, $tb, $all_columns, $oid_colums) = @_;
 
 	return if ($#{$oid_colums} < 0);
+
+	# Data migration will not be done on partitioned table, only relation
+	return if ($relkind{$tb}{kind} eq 'p');
 
 	my $tb_quoted = $tb;
 	$tb_quoted =~ s/"/\\"/g;
