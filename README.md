@@ -3,12 +3,14 @@
 ### Description
 
 Program used to convert large objects columns in a PostgreSQL database into
-bytea.
+bytea. `oid2bytea` will automatically detect the oid columns and process to
+their bytea transformation automatically; parallel processing can be used to
+accelerate the migration.
 
 Before running the migration be sure that there are no missing large objects
-(the oid have no entries in the pg_largeobject_metadata table) because the
+(the `oid` have no entries in the `pg_largeobject_metadata` table) because the
 migration of the table will fail. To check any missing large object run first
-oid2bytea with the --missing option, for example:
+`oid2bytea` with the `--missing` option, for example:
 
     ./oid2bytea -d testdb --missing
     LOG: Verifying if column public.test_oid1.bindata has missing large objects that will make lo_get() fail...
@@ -19,16 +21,16 @@ Then you can update the column to NULL on this record:
     UPDATE test_oid1 SET bindata = NULL WHERE bindata IN (1234);
 
 If the column has a NOT NULL constraint you can set the value to 0 and run
-oid2bytea with option -z or --zero-to-emty to set the value to an empty bytea
+`oid2bytea` with option `-z` or `--zero-to-emty` to set the value to an empty bytea
 during the data migration.
 
 ### Running modes
 
-Two migration modes are supported: local and remote.
+Two migration modes are supported: **local** and **remote**.
 
 #### local
 
-The corresponding large objects data stored in the pg_largeobject table
+The corresponding large objects data stored in the `pg_largeobject` table
 will be moved into a newly created bytea column and the old oid column will be
 removed. If no table list to convert is provided all columns with the oid data
 type will be converted to bytea otherwise all oid columns of the table list
@@ -40,7 +42,7 @@ UPDATE tb1 AS t1 SET bytea_col = lo_get(lo_col);
 ALTER TABLE tb1 DROP COLUMN lo_col;
 ALTER TABLE tb1 RENAME COLUMN bytea_col TO lo_col;
 ```
-Once all large objects are migrated the tool runs the vacuumlo command to
+Once all large objects are migrated the tool runs the `vacuumlo` command to
 remove all orphan large objects from the database.
 
 WARNING: the large object data will be duplicated until the `vacuumlo` command
@@ -57,12 +59,12 @@ running this tool. They will be dropped unless you use the `--no-drop` option.
 
 #### remote
 
-In this mode oid2bytea will migrate the local oid column to a remote database
+In this mode `oid2bytea` will migrate the local oid column to a remote database
 with the same structure except that the oid column have been replaced by a bytea
 column of the same name. To use the remote mode you just have to set the remote
-command line options (`-D`, `-H`, `-P`, `-U`). The all the data of the table with the oid
-column(s) will be moved and the oid replaced by the content of the large object
-before being sent to the remote database.
+command line options (`-D`, `-H`, `-P`, `-U`). The all the data of the table with
+the oid column(s) will be moved and the oid replaced by the content of the large
+object before being sent to the remote database.
 
 Note that missing large objects will throw an error and the data migration will
 be aborted for the table. To verify first if the table has no missing large
@@ -93,7 +95,7 @@ the name of the column processed.
 
 ### Requirements
 
-oid2bytea is a Perl program that require the following Perl modules:
+`oid2bytea` is a Perl program that require the following Perl modules:
 
 - Time::HiRes
 - DBI
@@ -110,7 +112,7 @@ perl Makefile.PL
 make
 sudo make install
 ```
-By default oid2bytea will be installed in `/usr/local/bin/`
+By default `oid2bytea` will be installed in `/usr/local/bin/`
 
 ### Tests
 
@@ -159,11 +161,11 @@ options:
 
 ### Authors
 
-Created and maintained by Gilles Darold
+Created and maintained by Gilles Darold at HexaCluster Corp.
 
 ### License
 
-This extension is free software distributed under the PostgreSQL Licence.
+This extension is free software distributed under the PostgreSQL License.
 
 - Copyright (c) 2025, HexaCluster
 
