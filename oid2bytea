@@ -721,7 +721,7 @@ sub remote_transform_oid_to_bytea
 	$query_get =~ s/, $//;
 	$query_get .= ' FROM ' . $tb;
 
-	$query_get .= " WHERE MOD($oid_colums->[0]::bigint, $SPLIT) = " . ($procnum - 1) if ($procnum > 0 and $oid_colums->[0]);
+	$query_get .= " WHERE MOD($oid_colums->[0]::bigint, $SPLIT) = " . ($procnum - 1) if ($SPLIT and $procnum > 0 and $oid_colums->[0]);
 
 	$query_get = qq{COPY (SELECT $query_get) TO PROGRAM 'psql -X $REMOTE_PG_OPT -c "\\\\copy $tb_quoted FROM stdin"'};
 
@@ -759,7 +759,7 @@ sub update_column
 {
 	my ($update_sql, $split_col, $procnum) = @_;
 
-	$update_sql .= " WHERE MOD(${split_col}::bigint, $SPLIT) = " . ($procnum - 1) if ($procnum > 0 and $split_col);
+	$update_sql .= " WHERE MOD(${split_col}::bigint, $SPLIT) = " . ($procnum - 1) if ($SPLIT and $procnum > 0 and $split_col);
 	logmsg('LOG', $update_sql);
 	if (!$DRY_RUN)
 	{
